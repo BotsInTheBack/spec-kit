@@ -1,4 +1,21 @@
 # GitHub Project Creation Slash Command Template
+# ===============================================
+#
+# This template defines the /projectize slash command for the GitHub Spec Kit.
+# It enables users to create and configure GitHub Projects with automated workflows.
+#
+# Features:
+# - Interactive project configuration
+# - GitHub Actions workflow setup
+# - Project automation script generation
+# - Cross-platform support (bash/PowerShell)
+#
+# Integration:
+# - Follows existing slash command patterns in the Spec Kit
+# - Uses the same JSON output format for AI agent processing
+# - Creates project configurations in .github/projects/
+# - Sets up automation workflows in .github/workflows/
+#
 ---
 description: Initialize GitHub Project creation with automated workflows and project setup.
 scripts:
