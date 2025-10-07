@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 #
-# GitHub Project Creation Script
-# =============================
+# GitHub Project Creation Script (Bash)
+# ===================================
 #
-# This script automates the setup of a new GitHub project with best practices.
+# Bash version of the GitHub Project creation script for Unix/Linux compatibility.
+# Part of the GitHub Spec Kit's /projectize slash command functionality.
+#
+# This script automates the creation of GitHub projects with best practices.
 # It's designed to be called by the /projectize slash command.
 #
 # Features:
-# - Create repositories from GitHub templates
-# - Auto-detect existing repositories
-# - Create GitHub Projects with templates (kanban/table)
-# - Set up branch protection rules
-# - Configure standard files and workflows
-# - Support for organizations and teams
+# - 🚀 One-command project initialization
+# - 🔒 Automatic branch protection
+# - 📋 Standard project files (README, LICENSE, .gitignore)
+# - 🏗️ Project board setup
+# - 🔄 CI/CD workflow configuration
 
 set -euo pipefail
 
@@ -28,34 +30,35 @@ DEFAULT_PROJECT_TEMPLATE="kanban"
 AUTO_DETECT=true
 FORCE=false
 JSON_OUTPUT=false
+PRIVATE=true
 
 # GitHub API configuration
 GITHUB_API="https://api.github.com"
 
 # Project templates
-PROJECT_TEMPLATES=(
-    "kanban" "Kanban board with To Do, In Progress, Done columns"
-    "table" "Table view with status, priority, and assignee fields"
+declare -A PROJECT_TEMPLATES=(
+    ["kanban"]="Kanban board with To Do, In Progress, Done columns"
+    ["table"]="Table view with status, priority, and assignee fields"
 )
 
 # Common repository templates
-REPO_TEMPLATES=(
-    "node" "Node.js with GitHub Actions"
-    "python" "Python with pytest and GitHub Actions"
-    "react" "React application with Vite"
-    "nextjs" "Next.js application"
-    "typescript" "TypeScript project"
-    "go" "Go module"
-    "rust" "Rust project with Cargo"
-    "terraform" "Terraform module"
-    "docker" "Docker project"
+declare -A REPO_TEMPLATES=(
+    ["node"]="Node.js with GitHub Actions"
+    ["python"]="Python with pytest and GitHub Actions"
+    ["react"]="React application with Vite"
+    ["nextjs"]="Next.js application"
+    ["typescript"]="TypeScript project"
+    ["go"]="Go module"
+    ["rust"]="Rust project with Cargo"
+    ["terraform"]="Terraform module"
+    ["docker"]="Docker project"
 )
 
 # Show help message
 show_help() {
     cat <<EOF
-GitHub Project Creation Tool (Internal Use)
-=========================================
+GitHub Project Creation Tool (Bash)
+==================================
 
 IMPORTANT: This script is designed to be used internally by the '/projectize' command
 in the GitHub Spec Kit. Please use the '/projectize' command from your IDE's chat interface
@@ -101,7 +104,7 @@ Feature Markdown:
     - [ ] Task 2
     - [x] Completed task
 
-Internal Examples (for development only):
+Examples:
   # Create a new project with Kanban board and tasks from feature.md
   $0 --name my-project --project-template kanban --feature-md .specify/features/current/feature.md
 
@@ -116,73 +119,211 @@ Internal Examples (for development only):
 
   # Output in JSON format for programmatic use
   $0 --name my-project --json
+
+  # Show available templates
+  $0 --help
 EOF
 }
 
 # Parse command line arguments
 parse_args() {
-    TEAMS=()
+    local TEAMS=()
     
     while [[ $# -gt 0 ]]; do
-        case $1 in
-            --name) PROJECT_NAME="$2"; shift 2 ;;
-            --description) DESCRIPTION="$2"; shift 2 ;;
-            --private) PRIVATE=true; shift ;;
-            --public) PRIVATE=false; shift ;;
-            --org) ORG="$2"; shift 2 ;;
-            --repo-template) REPO_TEMPLATE="$2"; shift 2 ;;
-            --project-template) PROJECT_TEMPLATE="$2"; shift 2 ;;
-            --license) LICENSE="$2"; shift 2 ;;
-            --branch) DEFAULT_BRANCH="$2"; shift 2 ;;
-            --team) TEAMS+=("$2"); shift 2 ;;
-            --feature-md) FEATURE_MD="$2"; shift 2 ;;
-            --force) FORCE=true; shift ;;
-            --no-auto-detect) AUTO_DETECT=false; shift ;;
-            --json) JSON_OUTPUT=true; shift ;;
-            -h|--help) show_help; exit 0 ;;
+        case "$1" in
+            --name|-n) 
+                PROJECT_NAME="$2"
+                shift 2
+                ;;
+            --description|-d) 
+                DESCRIPTION="$2"
+                shift 2
+                ;;
+            --private) 
+                PRIVATE=true
+                shift
+                ;;
+            --public) 
+                PRIVATE=false
+                shift
+                ;;
+            --org|-o) 
+                ORG="$2"
+                shift 2
+                ;;
+            --repo-template|-t) 
+                REPO_TEMPLATE="$2"
+                shift 2
+                ;;
+            --project-template|-p) 
+                PROJECT_TEMPLATE="$2"
+                shift 2
+                ;;
+            --license|-l) 
+                LICENSE="$2"
+                shift 2
+                ;;
+            --branch|-b) 
+                DEFAULT_BRANCH="$2"
+                shift 2
+                ;;
+            --team) 
+                TEAMS+=("$2")
+                shift 2
+                ;;
+            --feature-md|-f) 
+                FEATURE_MD="$2"
+                shift 2
+                ;;
+            --force) 
+                FORCE=true
+                shift
+                ;;
+            --no-auto-detect) 
+                AUTO_DETECT=false
+                shift
+                ;;
+            --json) 
+                JSON_OUTPUT=true
+                shift
+                ;;
+            -h|--help) 
+                show_help
+                exit 0
+                ;;
+            --) 
+                shift
+                break
+                ;;
+            -*) 
+                echo "Unknown option: $1" >&2
+                show_help
+                exit 1
+                ;;
             *) 
                 # If the argument doesn't start with --, treat it as the project name
-                if [[ "$1" != --* ]]; then
+                if [[ -z "${PROJECT_NAME:-}" ]]; then
                     PROJECT_NAME="$1"
-                    shift
                 else
-                    echo "Unknown option: $1"
+                    echo "Unexpected argument: $1" >&2
                     show_help
                     exit 1
                 fi
+                shift
                 ;;
         esac
     done
+    
+    # Export teams to global variable if any were specified
+    if [ ${#TEAMS[@]} -gt 0 ]; then
+        TEAMS_STR=$(printf ",%s" "${TEAMS[@]}")
+        TEAMS_STR=${TEAMS_STR:1}
+        export TEAMS_STR
+    fi
+    
+    # Set default feature markdown path if not specified
+    if [[ -z "${FEATURE_MD:-}" ]]; then
+        FEATURE_MD=".specify/features/current/feature.md"
+    fi
+    
+    # Ensure project template is valid
+    if [[ -n "${PROJECT_TEMPLATE:-}" && -z "${PROJECT_TEMPLATES[$PROJECT_TEMPLATE]:-}" ]]; then
+        echo "Error: Invalid project template: $PROJECT_TEMPLATE" >&2
+        list_templates
+        exit 1
+    fi
 }
 
 # List available templates
 list_templates() {
-    echo "Available repository templates:"
-    echo ""
-    for ((i=0; i<${#REPO_TEMPLATES[@]}; i+=2)); do
-        printf "  %-15s %s\n" "${REPO_TEMPLATES[i]}" "${REPO_TEMPLATES[i+1]}"
+    echo -e "\nAvailable repository templates:\n"
+    for template in "${!REPO_TEMPLATES[@]}"; do
+        printf "  %-15s %s\n" "$template" "${REPO_TEMPLATES[$template]}"
     done
-    echo ""
     
-    echo "Available project templates:"
-    echo ""
-    for ((i=0; i<${#PROJECT_TEMPLATES[@]}; i+=2)); do
-        printf "  %-15s %s\n" "${PROJECT_TEMPLATES[i]}" "${PROJECT_TEMPLATES[i+1]}"
+    echo -e "\nAvailable project templates:\n"
+    for template in "${!PROJECT_TEMPLATES[@]}"; do
+        printf "  %-15s %s\n" "$template" "${PROJECT_TEMPLATES[$template]}"
     done
     echo ""
 }
 
-# Detect existing git repository
+# Find repository root by searching for project markers
+find_repo_root() {
+    local dir="${1:-$PWD}"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -d "$dir/.git" || -d "$dir/.specify" ]]; then
+            echo "$dir"
+            return 0
+        fi
+        dir=$(dirname "$dir")
+    done
+    return 1
+}
+
+# Detect existing git repository and get repository info
+get_git_repository_info() {
+    local repo_root=""
+    local remote_url=""
+    local repo_owner=""
+    local repo_name=""
+    local is_git_repo=false
+    
+    # Try to get git info
+    if command -v git &> /dev/null; then
+        if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+            remote_url=$(git -C "$repo_root" remote get-url origin 2>/dev/null || echo "")
+            is_git_repo=true
+        fi
+    fi
+    
+    # If not in a git repo, try to find repository root by markers
+    if [[ -z "$repo_root" ]]; then
+        repo_root=$(find_repo_root)
+        if [[ -n "$repo_root" ]]; then
+            is_git_repo=false
+        fi
+    fi
+    
+    # Parse owner and repo from remote URL if available
+    if [[ -n "$remote_url" && "$remote_url" =~ github.com[:/]([^/]+)/([^/]+?)(\.git)?$ ]]; then
+        repo_owner=${BASH_REMATCH[1]}
+        repo_name=${BASH_REMATCH[2]%.git}
+    fi
+    
+    # Output as JSON for easier parsing
+    cat <<EOF
+{
+  "root": "$repo_root",
+  "remote_url": "$remote_url",
+  "is_git_repo": $is_git_repo,
+  "owner": "$repo_owner",
+  "name": "$repo_name"
+}
+EOF
+}
+
+# Detect existing git repository (legacy function, kept for compatibility)
 detect_git_repo() {
-    if [ -d .git ]; then
-        REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
-        if [[ $REMOTE_URL =~ github.com[/:]([^/]+)/([^/]+?)(\.git)?$ ]]; then
-            REPO_OWNER=${BASH_REMATCH[1]}
-            REPO_NAME=${BASH_REMATCH[2]%.git}
+    local repo_info
+    repo_info=$(get_git_repository_info)
+    
+    local is_git_repo
+    is_git_repo=$(jq -r '.is_git_repo' <<< "$repo_info")
+    
+    if [[ "$is_git_repo" == "true" ]]; then
+        local owner name
+        owner=$(jq -r '.owner' <<< "$repo_info")
+        name=$(jq -r '.name' <<< "$repo_info")
+        
+        if [[ -n "$owner" && -n "$name" ]]; then
+            REPO_OWNER=$owner
+            REPO_NAME=$name
             echo "Detected GitHub repository: $REPO_OWNER/$REPO_NAME"
             return 0
         fi
     fi
+    
     return 1
 }
 
@@ -208,121 +349,567 @@ create_repo_from_template() {
 
 # Initialize a new git repository
 init_repo() {
-    if [ "$FORCE" = true ] || [ ! -d .git ]; then
-        echo "Initializing git repository..."
-        git init
-        git checkout -b "${DEFAULT_BRANCH}"
-        
-        # Create basic README
-        echo "# ${PROJECT_NAME}" > README.md
-        
-        # Add default .gitignore if it doesn't exist
-        if [ ! -f .gitignore ]; then
-            curl -s https://www.toptal.com/developers/gitignore/api/node > .gitignore 2>/dev/null || \
-            echo "# Project files" > .gitignore
-        fi
-        
-        # Add default LICENSE if specified
-        if [ -n "${LICENSE}" ] && [ ! -f LICENSE ]; then
-            curl -s -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/licenses/${LICENSE}" | \
-                jq -r '.body' > LICENSE 2>/dev/null || \
-                echo "# ${LICENSE} License" > LICENSE
-        fi
-        
-        # Initial commit
-        git add .
-        git commit -m "Initial commit"
+    local repo_name="${1:-$PROJECT_NAME}"
+    local branch_name="${2:-$DEFAULT_BRANCH}"
+    local license_type="${3:-$LICENSE}"
+    local repo_root="${4:-$PWD}"
+    
+    if [[ "$FORCE" != "true" && -d "$repo_root/.git" ]]; then
+        echo "Git repository already initialized in $repo_root. Use --force to reinitialize."
+        return 0
     fi
+    
+    echo "Initializing git repository in $repo_root..."
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$repo_root"
+    
+    # Initialize git repository
+    (cd "$repo_root" && git init)
+    
+    # Set default branch name
+    (cd "$repo_root" && git config --local init.defaultBranch "$branch_name")
+    
+    # Create README.md with comprehensive content
+    cat > "$repo_root/README.md" <<EOF
+# $repo_name
+
+${DESCRIPTION:-}
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- [Git](https://git-scm.com/) (v2.25.0 or later)
+- [GitHub CLI](https://cli.github.com/) (v2.0.0 or later)
+- [Node.js](https://nodejs.org/) (if using JavaScript/TypeScript)
+- [Python](https://www.python.org/) (if using Python)
+
+### 📦 Installation
+
+\`\`\`bash
+# Clone the repository
+git clone https://github.com/${ORG:-username}/$repo_name.git
+cd $repo_name
+
+# Install dependencies (if applicable)
+[ -f "package.json" ] && npm install
+[ -f "requirements.txt" ] && pip install -r requirements.txt
+\`\`\`
+
+## 🛠️ Development
+
+### Building the project
+
+\`\`\`bash
+# Build the project (if applicable)
+[ -f "package.json" ] && npm run build
+\`\`\`
+
+### Running tests
+
+\`\`\`bash
+# Run tests (if applicable)
+[ -f "package.json" ] && npm test
+[ -f "pytest.ini" ] && pytest
+\`\`\`
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) to get started.
+
+## 📄 License
+
+This project is licensed under the ${license_type} License - see the [LICENSE](LICENSE) file for details.
+
+## 📝 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of notable changes.
+
+## 📧 Contact
+
+- GitHub: [@${ORG:-username}](https://github.com/${ORG:-username})
+- Email: your.email@example.com
+
+    
+    # Create .gitignore if it doesn't exist
+    if [[ ! -f "$repo_root/.gitignore" ]]; then
+        echo "Creating .gitignore..."
+        cat > "$repo_root/.gitignore" << 'EOF'
+# General
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+.python-version
+.python-version.*
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build output
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Editor directories and files
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.venv
+venv/
+ENV/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+*.egg
+*.so
+*.dll
+*.dylib
+*.pyc
+*.pyd
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local development
+.local/
+
+# Project specific
+.specify/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+.env.test
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+out
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test/
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Environment files
+.env
+.venv
+env/
+venv/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+EOF
+    fi
+    
+    # Create LICENSE if specified
+    if [[ -n "$license_type" && ! -f LICENSE ]]; then
+        case "$license_type" in
+            MIT)
+                cat > LICENSE << 'EOF'
+MIT License
+
+Copyright (c) $(date +%Y) ${ORG:-Your Name}
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+EOF
+                ;;
+            *)
+                # For other licenses, try to fetch from GitHub API
+                if ! curl -s -H "Accept: application/vnd.github.v3+json" \
+                    "https://api.github.com/licenses/${license_type}" | \
+                    jq -r '.body' > LICENSE 2>/dev/null; then
+                    echo "# ${license_type} License" > LICENSE
+                    echo "# See https://choosealicense.com/licenses/ for more information" >> LICENSE
+                fi
+                ;;
+        esac
+    fi
+    
+    # Create initial commit
+    git add .
+    git commit -m "Initial commit"
+    
+    echo "✅ Repository initialized with $branch_name branch"
 }
 
 # Parse feature markdown and extract tasks
-parse_feature_markdown() {
-    local markdown_file="$1"
+get_tasks_from_markdown() {
+    local markdown_file="${1:-}"
     local tasks=()
     
-    if [ ! -f "$markdown_file" ]; then
-        echo "Feature markdown file not found: $markdown_file"
+    if [[ -z "$markdown_file" ]]; then
+        echo "Error: No markdown file specified" >&2
         return 1
     fi
     
+    if [[ ! -f "$markdown_file" ]]; then
+        echo "Warning: Feature markdown file not found: $markdown_file" >&2
+        return 0
+    fi
+    
+    echo "Extracting tasks from: $markdown_file"
+    
     # Extract tasks from markdown checklist items
+    local in_code_block=false
+    local line
+    
     while IFS= read -r line; do
-        if [[ "$line" =~ ^-\s*\[.\]\s*(.*) ]]; then
-            tasks+=("${BASH_REMATCH[1]}")
+        # Skip code blocks
+        if [[ "$line" =~ ^\`\`\` ]]; then
+            in_code_block=$((1 - in_code_block))
+            continue
+        fi
+        
+        if [[ "$in_code_block" == "1" ]]; then
+            continue
+        fi
+        
+        # Match task items (- [ ] or * [ ])
+        if [[ "$line" =~ ^[\*\-]\s*\[[\sxX]\](\s+.*) ]]; then
+            local task_text="${BASH_REMATCH[1]}"
+            # Remove leading/trailing whitespace
+            task_text=$(echo "$task_text" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+            
+            # Skip empty tasks
+            if [[ -n "$task_text" ]]; then
+                tasks+=("$task_text")
+            fi
         fi
     done < "$markdown_file"
     
-    printf '%s\n' "${tasks[@]}"
+    # Output tasks as JSON array
+    if [[ ${#tasks[@]} -gt 0 ]]; then
+        printf '['
+        printf '"%s"' "${tasks[0]}"
+        for ((i=1; i<${#tasks[@]}; i++)); do
+            printf ',"%s"' "${tasks[i]}"
+        done
+        printf ']\n'
+        echo "Found ${#tasks[@]} tasks in $markdown_file" >&2
+    else
+        echo '[]'
+        echo "No tasks found in $markdown_file" >&2
+    fi
+    
+    return 0
+}
+
+# Alias for backward compatibility
+parse_feature_markdown() {
+    get_tasks_from_markdown "$@"
 }
 
 # Create GitHub project with tasks from feature markdown
 create_github_project() {
-    local project_template="${PROJECT_TEMPLATE:-$DEFAULT_PROJECT_TEMPLATE}"
-    local project_name="${PROJECT_NAME} Project"
-    local repo_full_name="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)"
-    local feature_md="${FEATURE_MD:-.specify/features/current/feature.md}"
+    local project_name="${1:-$PROJECT_NAME Project}"
+    local project_template="${2:-$DEFAULT_PROJECT_TEMPLATE}"
+    local project_description="${3:-$DESCRIPTION}"
+    local feature_md="${4:-$FEATURE_MD}"
     
-    if [ -z "$repo_full_name" ]; then
-        echo "Error: Not in a GitHub repository"
+    # Get repository information
+    local repo_info
+    repo_info=$(gh repo view --json nameWithOwner,owner 2>/dev/null || true)
+    
+    if [[ -z "$repo_info" ]]; then
+        echo "Error: Not in a GitHub repository" >&2
         return 1
     fi
-
+    
+    local repo_full_name
+    repo_full_name=$(jq -r '.nameWithOwner' <<< "$repo_info")
+    local owner
+    owner=$(jq -r '.owner.login' <<< "$repo_info")
+    
     echo "Creating $project_template project: $project_name"
     
     # Create the project
+    echo "Creating GitHub project..."
+    
     local project_output
     case $project_template in
         kanban)
             project_output=$(gh project create "$project_name" \
                 --format json \
-                --owner "$(echo $repo_full_name | cut -d/ -f1)" \
+                --owner "$owner" \
                 --source "$repo_full_name" \
-                --template "https://github.com/orgs/github/projects/1")
+                --template "https://github.com/orgs/github/projects/1" 2>&1) || {
+                echo "Error creating project: $project_output" >&2
+                return 1
+            }
             ;;
         table)
             project_output=$(gh project create "$project_name" \
                 --format json \
-                --owner "$(echo $repo_full_name | cut -d/ -f1)" \
+                --owner "$owner" \
                 --source "$repo_full_name" \
-                --format table)
+                --format table 2>&1) || {
+                echo "Error creating project: $project_output" >&2
+                return 1
+            }
             ;;
         *)
-            echo "Unknown project template: $project_template"
+            echo "Error: Unknown project template: $project_template" >&2
             return 1
             ;;
     esac
     
     # Extract project ID from output
-    local project_id=$(echo "$project_output" | jq -r '.id' 2>/dev/null)
+    local project_id
+    project_id=$(jq -r '.id' <<< "$project_output" 2>/dev/null || true)
     
-    if [ -n "$project_id" ] && [ -f "$feature_md" ]; then
+    if [[ -z "$project_id" ]]; then
+        echo "Error: Failed to create project" >&2
+        echo "Output: $project_output" >&2
+        return 1
+    fi
+    
+    echo "✅ Project created with ID: $project_id"
+    
+    # Add tasks from feature markdown if specified
+    if [[ -f "$feature_md" ]]; then
         echo "Adding tasks from feature markdown..."
+        
+        # Get tasks from markdown
+        local tasks_json
+        tasks_json=$(get_tasks_from_markdown "$feature_md")
+        
+        # Parse tasks from JSON array
+        local tasks=()
+        while IFS= read -r line; do
+            tasks+=("$line")
+        done < <(jq -r '.[]' <<< "$tasks_json" 2>/dev/null)
         
         # Create columns if needed (for kanban)
         local todo_column_id=""
-        if [ "$project_template" = "kanban" ]; then
-            todo_column_id=$(gh project column list $project_id --json id,name --jq '.[] | select(.name == "To do") | .id' 2>/dev/null)
-            if [ -z "$todo_column_id" ]; then
-                todo_column_id=$(gh project column create --project-id $project_id --name "To do" --format json | jq -r '.id')
+        if [[ "$project_template" == "kanban" ]]; then
+            echo "Setting up Kanban board columns..."
+            
+            # Try to get existing columns
+            todo_column_id=$(gh project column list "$project_id" --json id,name --jq '.[] | select(.name == "To do") | .id' 2>/dev/null || true)
+            
+            # Create columns if they don't exist
+            if [[ -z "$todo_column_id" ]]; then
+                echo "Creating Kanban columns..."
+                
+                # Create standard Kanban columns
+                for column in "To do" "In Progress" "Done"; do
+                    echo "Creating column: $column"
+                    gh project column create --project-id "$project_id" --name "$column" --format json >/dev/null || {
+                        echo "Warning: Failed to create column: $column" >&2
+                    }
+                done
+                
+                # Get the To Do column ID
+                todo_column_id=$(gh project column list "$project_id" --json id,name --jq '.[] | select(.name == "To do") | .id' 2>/dev/null || true)
             fi
         fi
         
-        # Add tasks from markdown
-        local task
-        while IFS= read -r task; do
-            if [ -n "$task" ]; then
-                echo "Adding task: $task"
-                if [ "$project_template" = "kanban" ] && [ -n "$todo_column_id" ]; then
-                    gh project item-add $todo_column_id --title "$task"
-                else
-                    gh project item-create $project_id --title "$task"
+        # Add tasks to the project
+        if [[ ${#tasks[@]} -gt 0 ]]; then
+            echo "Adding ${#tasks[@]} tasks to the project..."
+            
+            local success_count=0
+            local fail_count=0
+            
+            for task in "${tasks[@]}"; do
+                if [[ -n "$task" ]]; then
+                    echo -n "  - Adding: $task"
+                    
+                    # Add to the To Do column if this is a Kanban board
+                    if [[ -n "$todo_column_id" ]]; then
+                        if gh project item-add "$todo_column_id" --title "$task" >/dev/null 2>&1; then
+                            echo " "
+                            ((success_count++))
+                        else
+                            echo "  (Failed to add to Kanban board)" >&2
+                            ((fail_count++))
+                        fi
+                    else
+                        if gh project item-create "$project_id" --title "$task" >/dev/null 2>&1; then
+                            echo " "
+                            ((success_count++))
+                        else
+                            echo "  (Failed to add to project)" >&2
+                            ((fail_count++))
+                        fi
+                    fi
+                    
+                    # Add a small delay to avoid rate limiting
+                    sleep 0.5
                 fi
+            done
+            
+            # Print summary
+            if [[ $success_count -gt 0 ]]; then
+                echo "  Successfully added $success_count tasks to the project"
             fi
-        done < <(parse_feature_markdown "$feature_md")
+            if [[ $fail_count -gt 0 ]]; then
+                echo "  Failed to add $fail_count tasks to the project" >&2
+            fi
+        else
+            echo "No tasks found to add to the project."
+        fi
     fi
     
-    echo "$project_output"
+{{ ... }}
+    # Output project information
+    if [[ "$JSON_OUTPUT" == "true" ]]; then
+        jq -n --arg id "$project_id" \
+            --arg name "$project_name" \
+            --arg template "$project_template" \
+            --arg url "https://github.com/orgs/$owner/projects/$project_id" \
+            '{
+                "id": $id,
+                "name": $name,
+                "template": $template,
+                "url": $url,
+                "tasks_added": ('"${#tasks[@]}"' | tonumber)
+            }'
+    else
+        echo "✅ Project created successfully!"
+        echo "   URL: https://github.com/orgs/$owner/projects/$project_id"
+    fi
+    
+    return 0
 }
 
 # Set up team access

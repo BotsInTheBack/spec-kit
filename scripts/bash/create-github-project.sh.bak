@@ -3,21 +3,314 @@
 # GitHub Project Creation Script
 # =============================
 #
-# This script is part of the GitHub Spec Kit's /projectize slash command.
-# It handles the interactive setup of GitHub Projects with automated workflows.
+# This script automates the setup of a new GitHub project with best practices.
+# It's designed to be called by the /projectize slash command.
 #
-# Purpose:
-# - Create project configuration files with comprehensive settings
-# - Set up GitHub Actions workflows for project automation
-# - Generate project management scripts with full GitHub API integration
-# - Provide interactive configuration for project settings
-#
-# Integration:
-# - Called by the projectize.md slash command template
-# - Outputs JSON for AI agent processing (when --json flag used)
-# - Creates new git branch for project configuration
-# - Follows existing Spec Kit patterns and conventions
-#
+# Features:
+# - Automated repository initialization from template
+# - GitHub Project creation with templates (kanban/table)
+# - Auto-detection of existing repositories
+# - Branch protection rules
+# - Standard GitHub files (README, LICENSE, etc.)
+# - CI/CD workflow setup
+# - Issue and PR templates
+
+set -euo pipefail
+
+# Load common functions and variables
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/common.sh"
+
+# Default values
+DEFAULT_BRANCH="main"
+DEFAULT_LICENSE="MIT"
+DEFAULT_PRIVACY="private"
+DEFAULT_PROJECT_TEMPLATE="kanban"
+
+# GitHub API configuration
+GITHUB_API="https://api.github.com"
+DEFAULT_TEMPLATE="none"
+
+# Popular GitHub templates
+# Format: "template-name" "Description of the template"
+POPULAR_TEMPLATES=(
+    "node" "Node.js with GitHub Actions for CI/CD"
+    "python" "Python with pytest and GitHub Actions"
+    "react" "React application with Vite"
+    "typescript" "TypeScript with Node.js"
+    "jekyll" "Jekyll static site generator"
+    "gatsby" "Gatsby.js static site"
+    "next" "Next.js application"
+    "vue" "Vue.js application"
+    "docker" "Docker container with GitHub Actions"
+    "terraform" "Terraform module"
+)
+
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --name) PROJECT_NAME="$2"; shift 2 ;;
+            --description) DESCRIPTION="$2"; shift 2 ;;
+            --private) PRIVATE=true; shift ;;
+            --public) PRIVATE=false; shift ;;
+            --org) ORG="$2"; shift 2 ;;
+            --workflow) WORKFLOW="$2"; shift 2 ;;
+            --license) LICENSE="$2"; shift 2 ;;
+            --branch) DEFAULT_BRANCH="$2"; shift 2 ;;
+            --template) TEMPLATE="$2"; shift 2 ;;
+            --json) JSON_OUTPUT=true; shift ;;
+            *) shift ;;
+        esac
+    done
+}
+
+# List available templates
+list_templates() {
+    echo "Available project templates:"
+    echo ""
+    for ((i=0; i<${#POPULAR_TEMPLATES[@]}; i+=2)); do
+        printf "  %-15s %s\n" "${POPULAR_TEMPLATES[i]}" "${POPULAR_TEMPLATES[i+1]}"
+    done
+    echo ""
+}
+
+# Initialize a new git repository with optional template
+init_repo() {
+    if [ ! -d .git ]; then
+        echo "Initializing git repository..."
+        
+        # If no template selected, prompt the user
+        if [ -z "${TEMPLATE:-}" ] || [ "$TEMPLATE" = "none" ]; then
+            echo "No template selected. Would you like to choose one? [y/N]"
+            read -r USE_TEMPLATE
+            
+            if [[ $USE_TEMPLATE =~ ^[Yy](es)?$ ]]; then
+                list_templates
+                echo "Enter template name (or 'none' to skip):"
+                read -r TEMPLATE
+            fi
+        fi
+        
+        # Initialize git repo
+        git init
+        
+        # If template is selected, fetch it
+        if [ -n "${TEMPLATE:-}" ] && [ "$TEMPLATE" != "none" ]; then
+            echo "Setting up project using template: $TEMPLATE"
+            
+            # Check if template exists in our list
+            TEMPLATE_EXISTS=false
+            for ((i=0; i<${#POPULAR_TEMPLATES[@]}; i+=2)); do
+                if [ "${POPULAR_TEMPLATES[i]}" = "$TEMPLATE" ]; then
+                    TEMPLATE_EXISTS=true
+                    break
+                fi
+            done
+            
+            if [ "$TEMPLATE_EXISTS" = true ]; then
+                # Create basic project structure based on template
+                case $TEMPLATE in
+                    node)
+                        echo "# Node.js Project" > README.md
+                        echo "node_modules/" > .gitignore
+                        echo "dist/" >> .gitignore
+                        echo "{\"name\": \"${PROJECT_NAME}\", \"version\": \"1.0.0\"}" > package.json
+                        ;;
+                    python)
+                        echo "# Python Project" > README.md
+                        echo "__pycache__/" > .gitignore
+                        echo "*.py[cod]" >> .gitignore
+                        echo "venv/" >> .gitignore
+                        mkdir -p src tests
+                        touch src/__init__.py tests/__init__.py
+                        ;;
+                    # Add more template setups as needed
+                    *)
+                        echo "# ${PROJECT_NAME}" > README.md
+                        ;;
+                esac
+            else
+                echo "Template '$TEMPLATE' not found. Using default setup."
+                echo "# ${PROJECT_NAME}" > README.md
+            fi
+        else
+            echo "Using default project setup (no template)"
+            echo "# ${PROJECT_NAME}" > README.md
+        fi
+        
+        # Initial commit
+        git add .
+        git commit -m "Initial commit"
+    fi
+}
+
+# Create standard project files
+create_standard_files() {
+    # Create .gitignore based on project type
+    case "${WORKFLOW}" in
+        node)
+            curl -s https://www.toptal.com/developers/gitignore/api/node > .gitignore
+            ;;
+        python)
+            curl -s https://www.toptal.com/developers/gitignore/api/python > .gitignore
+            ;;
+        *)
+            curl -s https://www.toptal.com/developers/gitignore/api/${WORKFLOW} > .gitignore 2>/dev/null || \
+            echo "# Project specific ignores" > .gitignore
+            ;;
+    esac
+
+    # Add default LICENSE if not exists
+    if [ ! -f LICENSE ]; then
+        curl -s -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/licenses/${LICENSE:-$DEFAULT_LICENSE}" | \
+            jq -r '.body' > LICENSE
+    fi
+
+    # Create .github directory structure
+    mkdir -p .github/{workflows,ISSUE_TEMPLATE,PULL_REQUEST_TEMPLATE}
+}
+
+# Set up GitHub repository with optional template
+setup_github_repo() {
+    # Check if GitHub CLI is installed
+    if ! command -v gh &> /dev/null; then
+        echo "GitHub CLI (gh) is required. Please install it first."
+        exit 1
+    fi
+    
+    # Prepare repository creation command
+    local create_cmd=("gh" "repo" "create")
+    
+    # Add template if specified
+    if [ -n "${TEMPLATE:-}" ] && [ "$TEMPLATE" != "none" ]; then
+        case $TEMPLATE in
+            node) create_cmd+=("--template" "actions/typescript-action") ;;
+            python) create_cmd+=("--template" "actions/python-action") ;;
+            react) create_cmd+=("--template" "facebook/create-react-app") ;;
+            # Add more template mappings as needed
+        esac
+    fi
+    
+    # Add repository name and options
+    if [ -n "${ORG:-}" ]; then
+        create_cmd+=("${ORG}/${PROJECT_NAME}")
+    else
+        create_cmd+=("${PROJECT_NAME}")
+    fi
+    
+    create_cmd+=(
+        "--${PRIVACY:-$DEFAULT_PRIVACY}"
+        "--description" "${DESCRIPTION:-}"
+        "--source" "."
+        "--remote" "upstream"
+    )
+    
+    # Execute the repository creation command
+    "${create_cmd[@]}"
+    if [ -n "${ORG:-}" ]; then
+        gh repo create "${ORG}/${PROJECT_NAME}" \
+            --${PRIVACY:-$DEFAULT_PRIVACY} \
+            --description "${DESCRIPTION:-}" \
+            --source . \
+            --remote upstream
+    else
+        gh repo create "${PROJECT_NAME}" \
+            --${PRIVACY:-$DEFAULT_PRIVACY} \
+            --description "${DESCRIPTION:-}" \
+            --source . \
+            --remote upstream
+    fi
+
+    # Set branch protection rules (only if not using a template that might have its own rules)
+    if [ -z "${TEMPLATE:-}" ] || [ "$TEMPLATE" = "none" ]; then
+        gh api -X PUT \
+            "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/branches/${DEFAULT_BRANCH}/protection" \
+            --input - << EOF
+        {
+            "required_status_checks": {
+                "strict": true,
+                "checks": ["build"]
+            },
+            "enforce_admins": true,
+            "required_pull_request_reviews": {
+                "required_approving_review_count": 1
+            },
+            "restrictions": null
+        }
+EOF
+    fi
+
+    # Create project board (skip if using a template that might create its own)
+    if [ -z "${TEMPLATE:-}" ] || [ "$TEMPLATE" = "none" ]; then
+        gh project create "${PROJECT_NAME} Project" \
+            --format json \
+            --owner "$(gh repo view --json owner -q .owner.login)" \
+            --source "$(gh repo view --json nameWithOwner -q .nameWithOwner)" \
+            --template "https://github.com/orgs/github/projects/1"
+    fi
+}
+
+# Main function
+main() {
+    parse_args "$@"
+    
+    # Set default project name to current directory name if not provided
+    if [ -z "${PROJECT_NAME:-}" ]; then
+        PROJECT_NAME=$(basename "$(pwd)")
+    fi
+    
+    # If template is provided via args, validate it
+    if [ -n "${TEMPLATE:-}" ] && [ "$TEMPLATE" != "none" ]; then
+        TEMPLATE_EXISTS=false
+        for ((i=0; i<${#POPULAR_TEMPLATES[@]}; i+=2)); do
+            if [ "${POPULAR_TEMPLATES[i]}" = "$TEMPLATE" ]; then
+                TEMPLATE_EXISTS=true
+                break
+            fi
+        done
+        
+        if [ "$TEMPLATE_EXISTS" = false ]; then
+            echo "Warning: Template '$TEMPLATE' is not in the list of known templates."
+            echo "Known templates: "
+            for ((i=0; i<${#POPULAR_TEMPLATES[@]}; i+=2)); do
+                echo "  ${POPULAR_TEMPLATES[i]} - ${POPULAR_TEMPLATES[i+1]}"
+            done
+            echo ""
+            echo "Continue with basic setup? [Y/n]"
+            read -r CONTINUE
+            if [[ $CONTINUE =~ ^[Nn](o)?$ ]]; then
+                exit 1
+            fi
+            TEMPLATE="none"
+        fi
+    fi
+
+    # Initialize repository
+    init_repo
+
+    # Create standard files
+    create_standard_files
+
+    # Set up GitHub repository if not in CI
+    if [ -z "${CI:-}" ]; then
+        setup_github_repo
+    fi
+
+    # Output success message
+    if [ "${JSON_OUTPUT:-false}" = true ]; then
+        echo '{"status": "success", "message": "Project initialized successfully"}'
+    else
+        echo "✅ Project '${PROJECT_NAME}' has been successfully initialized!"
+        if [ -z "${CI:-}" ]; then
+            echo "🌍 View your repository at: $(gh repo view --json url -q .url)"
+        fi
+    fi
+}
+
+# Run the script
+main "$@"
 # Files Created:
 # - .github/projects/{project-id}.yml - Project configuration
 # - .github/workflows/project-automation.yml - GitHub Actions workflow

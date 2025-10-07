@@ -1,64 +1,230 @@
-#
-# GitHub Project Creation Script (PowerShell)
-# ==========================================
-#
-# PowerShell version of the GitHub Project creation script for Windows compatibility.
-# Part of the GitHub Spec Kit's /projectize slash command functionality.
-#
-# Purpose:
-# - Automated GitHub project initialization with best practices
-# - Cross-platform project configuration for Windows users
-# - Sets up repository, branch protection, and project board
-# - Configures CI/CD workflows and standard files
-#
-# Features:
-# - 🚀 One-command project initialization
-# - 🔒 Automatic branch protection
-# - 📋 Standard project files (README, LICENSE, .gitignore)
-# - 🏗️ Project board setup
-# - 🔄 CI/CD workflow configuration
-#
-# Usage:
-#   .\create-project.ps1 --name my-project --workflow node
-#   .\create-project.ps1 --org myorg --name our-project --public
-#   .\create-project.ps1 --name my-python-project --workflow python --license MIT
-#
+<#
+.SYNOPSIS
+    GitHub Project Creation Tool (Internal Use)
+    =========================================
 
-[CmdletBinding()]
+    IMPORTANT: This script is designed to be used internally by the '/projectize' command
+    in the GitHub Spec Kit. Please use the '/projectize' command from your IDE's chat interface
+    for the best experience.
+
+    For end users, the recommended way to use this functionality is via the '/projectize' command:
+
+      /projectize --name my-project --description "Project description"
+
+.DESCRIPTION
+    This script automates the creation of GitHub projects with best practices,
+    including repository setup, project boards, and task tracking.
+    
+    It's the PowerShell version of the GitHub Project creation script for Windows compatibility.
+    Part of the GitHub Spec Kit's /projectize slash command functionality.
+
+    Features:
+    - 🚀 One-command project initialization
+    - 🔒 Automatic branch protection
+    - 📋 Standard project files (README, LICENSE, .gitignore)
+    - 🏗️ Project board setup
+    - 🔄 CI/CD workflow configuration
+
+    Internal Documentation (for development purposes only):
+    ----------------------------------------------------
+    This script automates the creation of GitHub projects with best practices,
+    including repository setup, project boards, and task tracking.
+
+.PARAMETER Name
+    Project name (default: current directory name)
+
+.PARAMETER Description
+    Project description
+
+.PARAMETER Private
+    Make repository private (default)
+
+.PARAMETER Public
+    Make repository public
+
+.PARAMETER Org
+    Organization name (default: current user)
+
+.PARAMETER RepoTemplate
+    GitHub repo to use as template (owner/repo)
+
+.PARAMETER ProjectTemplate
+    Project type (kanban/table, default: kanban)
+
+.PARAMETER FeatureMarkdown
+    Path to feature markdown file containing tasks (default: .specify/features/current/feature.md)
+
+.PARAMETER License
+    License type (MIT, Apache-2.0, etc.)
+
+.PARAMETER Branch
+    Default branch name (default: main)
+
+.PARAMETER Team
+    Grant access to a team (can be specified multiple times)
+
+.PARAMETER Force
+    Override auto-detection
+
+.PARAMETER NoAutoDetect
+    Disable auto-detection
+
+.PARAMETER Json
+    Output in JSON format
+
+.PARAMETER Help
+    Show this help message
+
+Project Templates:
+  kanban                   Kanban board with To Do, In Progress, Done columns
+  table                    Table view with status, priority, and assignee fields
+
+Feature Markdown:
+  The -FeatureMarkdown parameter allows you to specify a markdown file containing
+  tasks in checklist format. These tasks will be automatically added to your
+  project board. Example:
+    - [ ] Task 1
+    - [ ] Task 2
+    - [x] Completed task
+
+.EXAMPLE
+    # Create a new project with Kanban board
+    .\create-github-project.ps1 --name my-project --project-template kanban
+
+.EXAMPLE
+    # Create a public project in an organization with a team
+    .\create-github-project.ps1 --name our-app --org myorg --public --team @myorg/developers
+
+.EXAMPLE
+    # Create a project from a repository template
+    .\create-github-project.ps1 --name api-service --repo-template org/template-repo
+
+.EXAMPLE
+    # Output in JSON format for programmatic use
+    .\create-github-project.ps1 --name my-project --json
+
+.EXAMPLE
+    # Create a project with tasks from a feature markdown file
+    .\create-github-project.ps1 --name my-feature --feature-md .specify/features/current/feature.md
+
+.NOTES
+    This is an internal tool. For end users, please use the '/projectize' command
+    from your IDE's chat interface for the best experience.
+#>
+
+# Set strict mode for better error handling
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+
+# Load common functions and variables
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$COMMON_SCRIPT = Join-Path $SCRIPT_DIR 'common.ps1'
+if (Test-Path $COMMON_SCRIPT) {
+    . $COMMON_SCRIPT
+}
+
+[CmdletBinding(DefaultParameterSetName='Default')]
 param(
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory=$false, Position=0)]
+    [Alias('name')]
     [string]$Name,
     
     [Parameter(Mandatory=$false)]
+    [Alias('description')]
     [string]$Description,
     
     [Parameter(Mandatory=$false)]
+    [Alias('private')]
     [switch]$Private = $true,
     
     [Parameter(Mandatory=$false)]
+    [Alias('public')]
     [switch]$Public = $false,
     
     [Parameter(Mandatory=$false)]
+    [Alias('org')]
     [string]$Org,
     
     [Parameter(Mandatory=$false)]
-    [string]$Workflow = "node",
+    [Alias('repo-template')]
+    [string]$RepoTemplate,
     
     [Parameter(Mandatory=$false)]
-    [string]$License = "MIT",
+    [Alias('project-template')]
+    [ValidateSet('kanban', 'table')]
+    [string]$ProjectTemplate = 'kanban',
     
     [Parameter(Mandatory=$false)]
-    [string]$Branch = "main",
+    [Alias('license')]
+    [string]$License = 'MIT',
     
     [Parameter(Mandatory=$false)]
-    [switch]$NoCI,
+    [Alias('branch')]
+    [string]$Branch = 'main',
     
     [Parameter(Mandatory=$false)]
+    [Alias('team')]
+    [string[]]$Team = @(),
+    
+    [Parameter(Mandatory=$false)]
+    [Alias('feature-md')]
+    [string]$FeatureMarkdown = '.specify/features/current/feature.md',
+    
+    [Parameter(Mandatory=$false)]
+    [Alias('force')]
+    [switch]$Force,
+    
+    [Parameter(Mandatory=$false)]
+    [Alias('no-auto-detect')]
+    [switch]$NoAutoDetect,
+    
+    [Parameter(Mandatory=$false)]
+    [Alias('json')]
     [switch]$Json,
     
     [Parameter(Mandatory=$false)]
+    [Alias('h', 'help')]
     [switch]$Help
 )
+
+# Show help if requested
+if ($Help) {
+    Get-Help $MyInvocation.MyCommand.Definition -Detailed
+    exit 0
+}
+
+# Set privacy flag based on parameters
+if ($Public) {
+    $Private = $false
+}
+
+# Set default project name to current directory if not provided
+if ([string]::IsNullOrEmpty($Name)) {
+    $Name = (Get-Item -Path ".").Name
+}
+
+# GitHub API configuration
+$GITHUB_API = "https://api.github.com"
+
+# Project templates
+$PROJECT_TEMPLATES = @{
+    "kanban" = "Kanban board with To Do, In Progress, Done columns"
+    "table" = "Table view with status, priority, and assignee fields"
+}
+
+# Common repository templates
+$REPO_TEMPLATES = @{
+    "node" = "Node.js with GitHub Actions"
+    "python" = "Python with pytest and GitHub Actions"
+    "react" = "React application with Vite"
+    "nextjs" = "Next.js application"
+    "typescript" = "TypeScript project"
+    "go" = "Go module"
+    "rust" = "Rust project with Cargo"
+    "terraform" = "Terraform module"
+    "docker" = "Docker project"
+}
 
 # Show help if requested
 if ($Help) {
@@ -92,53 +258,424 @@ function Find-RepoRoot {
     return $null
 }
 
-# Find repository root - prefer git detection, fallback to marker search
-$RepoRoot = $null
-try {
-    $RepoRoot = git rev-parse --show-toplevel 2>$null
-    $HasGit = $true
-} catch {
-    $RepoRoot = Find-RepoRoot (Get-Location)
-    $HasGit = $false
+# Function to detect git repository and get repository info
+function Get-GitRepositoryInfo {
+    $repoRoot = $null
+    $remoteUrl = $null
+    
+    try {
+        $repoRoot = git rev-parse --show-toplevel 2>$null
+        $remoteUrl = git remote get-url origin 2>$null
+    } catch {
+        $repoRoot = Find-RepoRoot (Get-Location).Path
+    }
+    
+    $repoInfo = @{
+        Root = $repoRoot
+        RemoteUrl = $remoteUrl
+        IsGitRepo = -not [string]::IsNullOrEmpty($repoRoot)
+    }
+    
+    # Parse owner and repo from remote URL if available
+    if ($remoteUrl -match 'github.com[:/]([^/]+)/([^/]+?)(\.git)?$') {
+        $repoInfo.Owner = $matches[1]
+        $repoInfo.Name = $matches[2] -replace '\.git$', ''
+    }
+    
+    return $repoInfo
 }
 
-if (-not $RepoRoot) {
-    Write-Error "Could not determine repository root."
+# Function to list available templates
+function Show-AvailableTemplates {
+    Write-Host "`nAvailable repository templates:" -ForegroundColor Cyan
+    Write-Host ""
+    $REPO_TEMPLATES.GetEnumerator() | Sort-Object Name | ForEach-Object {
+        Write-Host ("  {0,-15} {1}" -f $_.Name, $_.Value)
+    }
+    
+    Write-Host "`nAvailable project templates:" -ForegroundColor Cyan
+    Write-Host ""
+    $PROJECT_TEMPLATES.GetEnumerator() | Sort-Object Name | ForEach-Object {
+        Write-Host ("  {0,-15} {1}" -f $_.Name, $_.Value)
+    }
+    Write-Host ""
+}
+
+# Function to create repository from template
+function New-RepositoryFromTemplate {
+    param(
+        [string]$Template,
+        [string]$Name,
+        [string]$Description,
+        [bool]$Private,
+        [string]$Org
+    )
+    
+    $templateOwner, $templateRepo = $Template -split '/'
+    if ($templateOwner -notmatch '^[a-zA-Z0-9_-]+$' -or $templateRepo -notmatch '^[a-zA-Z0-9_-]+$') {
+        Write-Error "Invalid template format. Expected format: owner/repo"
+        return $false
+    }
+    
+    $privateFlag = if ($Private) { "--private" } else { "--public" }
+    $orgFlag = if ($Org) { "--org $Org" } else { "" }
+    $descFlag = if ($Description) { "--description `"$Description`"" } else { "" }
+    
+    try {
+        $command = "gh repo create $Name --template $Template $privateFlag $orgFlag $descFlag --clone"
+        Write-Verbose "Executing: $command"
+        Invoke-Expression $command
+        
+        # Change to the new repository directory
+        Set-Location $Name
+        return $true
+    } catch {
+        Write-Error "Failed to create repository from template: $_"
+        return $false
+    }
+}
+
+# Function to initialize a new repository
+function Initialize-Repository {
+    param(
+        [string]$Name,
+        [string]$Branch,
+        [string]$License,
+        [string]$Description,
+        [bool]$Private
+    )
+    
+    try {
+        # Initialize git repository
+        git init
+        
+        # Create initial commit with README
+        $readmeContent = @"
+# $Name
+
+$Description
+
+## Getting Started
+
+### Prerequisites
+
+- [Git](https://git-scm.com/)
+- [GitHub CLI](https://cli.github.com/)
+
+### Installation
+
+```bash
+git clone https://github.com/$($Org ?? 'username')/$Name.git
+cd $Name
+```
+
+## License
+
+This project is licensed under the $License License - see the [LICENSE](LICENSE) file for details.
+"@
+        
+        $readmeContent | Out-File -FilePath "README.md" -Encoding utf8
+        
+        # Create .gitignore
+        @"
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Environment files
+.env
+.venv
+env/
+venv/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+"@ | Out-File -FilePath ".gitignore" -Encoding utf8
+        
+        # Create LICENSE if specified
+        if ($License -eq 'MIT') {
+            @"
+MIT License
+
+Copyright (c) $(Get-Date -Format 'yyyy') $(if ($Org) { $Org } else { 'Your Name' })
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"@ | Out-File -FilePath "LICENSE" -Encoding utf8
+        }
+        
+        # Initial commit
+        git add .
+        git commit -m "Initial commit"
+        
+        # Create and switch to the specified branch
+        git checkout -b $Branch
+        
+        return $true
+    } catch {
+        Write-Error "Failed to initialize repository: $_"
+        return $false
+    }
+}
+
+# Function to parse feature markdown and extract tasks
+function Get-TasksFromMarkdown {
+    param([string]$Path)
+    
+    if (-not (Test-Path $Path)) {
+        Write-Warning "Feature markdown file not found: $Path"
+        return @()
+    }
+    
+    $content = Get-Content $Path -Raw
+    $tasks = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $currentSection = ""
+    $taskId = 1
+    
+    # Process each line in the markdown file
+    $content -split "`n" | ForEach-Object {
+        $line = $_.Trim()
+        
+        # Check for section headers
+        if ($line -match '^##?\s+(.+)$') {
+            $currentSection = $matches[1].Trim()
+        }
+        # Check for task items
+        elseif ($line -match '^- \[ \]\s+(.+)$') {
+            $tasks.Add([PSCustomObject]@{
+                Id = $taskId++
+                Title = $matches[1].Trim()
+                Section = $currentSection
+                Status = 'To Do'
+            })
+        }
+    }
+    
+    return $tasks
+}
+
+# Function to create GitHub project
+function New-GitHubProject {
+    param(
+        [string]$Name,
+        [string]$Template,
+        [string]$Description,
+        [string]$Branch,
+        [array]$Tasks,
+        [bool]$Json
+    )
+    
+    try {
+        # Create GitHub project
+        $projectArgs = @(
+            'project', 'create', $Name,
+            '--format', 'json',
+            '--owner', (if ($Org) { $Org } else { $env:USERNAME }),
+            '--title', $Name,
+            '--description', $Description,
+            '--template', $Template
+        )
+        
+        $project = gh $projectArgs | ConvertFrom-Json
+        
+        # Add tasks to the project
+        if ($Tasks.Count -gt 0) {
+            $Tasks | ForEach-Object {
+                $taskArgs = @(
+                    'project', 'item-add', $project.id,
+                    '--title', $_.Title,
+                    '--body', "Section: $($_.Section)",
+                    '--format', 'json'
+                )
+                gh $taskArgs | Out-Null
+            }
+        }
+        
+        # Set default branch protection
+        $protectionArgs = @(
+            'api', "repos/$(if ($Org) { "$Org/" } else { "" })$Name/branches/$Branch/protection"
+            '-X', 'PUT',
+            '-H', 'Accept: application/vnd.github.v3+json',
+            '-f', 'enforce_admins=null',
+            '-f', 'required_pull_request_reviews.required_approving_review_count=1',
+            '-f', 'required_pull_request_reviews.dismiss_stale_reviews=true',
+            '-f', 'required_status_checks.strict=true',
+            '-f', 'required_status_checks.contexts=[]',
+            '-f', 'restrictions=null'
+        )
+        
+        gh $protectionArgs | Out-Null
+        
+        # Output the result
+        if ($Json) {
+            return $project | ConvertTo-Json -Depth 10
+        } else {
+            Write-Host "✅ Successfully created project: $($project.html_url)" -ForegroundColor Green
+            return $project
+        }
+    } catch {
+        Write-Error "Failed to create GitHub project: $_"
+        return $null
+    }
+}
+
+# Function to set up team access
+function Set-TeamAccess {
+    param([array]$Teams)
+    
+    foreach ($team in $Teams) {
+        if ($team -match '^@([^/]+)/([^/]+)$') {
+            $orgName = $matches[1]
+            $teamSlug = $matches[2]
+            
+            try {
+                gh api -X PUT "orgs/$orgName/teams/$teamSlug/repos/$Org/$Name" \
+                    -f "permission=push" | Out-Null
+                Write-Host "✅ Granted push access to team: $team" -ForegroundColor Green
+            } catch {
+                Write-Warning "Failed to grant access to team $team: $_"
+            }
+        } else {
+            Write-Warning "Invalid team format: $team. Expected format: @org/team"
+        }
+    }
+}
+        $Directory = Split-Path $Directory -Parent
+    }
+    return $null
+}
+
+# Main script execution
+function Start-ProjectCreation {
+    # Show help if no arguments provided
+    if ($args.Count -eq 0 -and -not $Name) {
+        Show-AvailableTemplates
+        Write-Host "Use -Help for detailed usage information" -ForegroundColor Yellow
+        exit 0
+    }
+
+    # Get repository information
+    $repoInfo = Get-GitRepositoryInfo
+    $currentDir = Get-Location
+    
+    # If no name provided and we're in a git repo, use the repo name
+    if (-not $Name -and $repoInfo.IsGitRepo) {
+        $Name = $repoInfo.Name
+    }
+    
+    # If still no name, use current directory name
+    if (-not $Name) {
+        $Name = (Get-Item -Path ".").Name
+    }
+    
+    # If we have a repository template, create from template
+    if ($RepoTemplate) {
+        Write-Host "🚀 Creating repository from template: $RepoTemplate" -ForegroundColor Cyan
+        $success = New-RepositoryFromTemplate -Template $RepoTemplate -Name $Name -Description $Description -Private $Private -Org $Org
+        
+        if (-not $success) {
+            Write-Error "Failed to create repository from template"
+            exit 1
+        }
+    }
+    # If we're not in a git repository, initialize one
+    elseif (-not $repoInfo.IsGitRepo) {
+        Write-Host "🔄 Initializing new git repository" -ForegroundColor Cyan
+        $success = Initialize-Repository -Name $Name -Branch $Branch -License $License -Description $Description -Private $Private
+        
+        if (-not $success) {
+            Write-Error "Failed to initialize repository"
+            exit 1
+        }
+    }
+    
+    # If we have a project template, create a GitHub project
+    if ($ProjectTemplate) {
+        # Parse tasks from feature markdown if provided
+        $tasks = @()
+        if ($FeatureMarkdown) {
+            $tasks = Get-TasksFromMarkdown -Path $FeatureMarkdown
+            Write-Host "📋 Found $($tasks.Count) tasks in feature markdown" -ForegroundColor Green
+        }
+        
+        # Create GitHub project
+        Write-Host "🏗️  Creating GitHub project with $ProjectTemplate template" -ForegroundColor Cyan
+        $project = New-GitHubProject -Name $Name -Template $ProjectTemplate -Description $Description -Branch $Branch -Tasks $tasks -Json:$Json
+        
+        if (-not $project) {
+            Write-Error "Failed to create GitHub project"
+            exit 1
+        }
+        
+        # Output project information
+        if ($Json) {
+            $project | ConvertTo-Json -Depth 10
+        } else {
+            Write-Host "✅ Successfully created project: $($project.html_url)" -ForegroundColor Green
+        }
+    }
+    
+    # Set up team access if specified
+    if ($Team.Count -gt 0) {
+        Write-Host "👥 Setting up team access" -ForegroundColor Cyan
+        Set-TeamAccess -Teams $Team
+    }
+    
+    Write-Host "✨ Project setup complete!" -ForegroundColor Green
+}
+
+# Execute the main function
+try {
+    Start-ProjectCreation @PSBoundParameters
+} catch {
+    Write-Error "An error occurred: $_"
+    if ($_.ScriptStackTrace) {
+        Write-Debug "Stack trace: $($_.ScriptStackTrace)"
+    }
     exit 1
 }
 
-Set-Location $RepoRoot
-
-# Create unique project identifier with timestamp and description slug
-$Timestamp = Get-Date -Format "yyyyMMddHHmmss"
-$ProjectSlug = $ProjectDescription.ToLower() -replace '[^a-z0-9]', '-' -replace '-+', '-' -replace '^-|-$', ''
-$ProjectId = "project-${Timestamp}-${ProjectSlug.Substring(0, [Math]::Min(20, $ProjectSlug.Length))}"
-
-# Create new git branch for this project configuration
-if ($HasGit) {
-    git checkout -b $ProjectId 2>$null | Out-Null
-} else {
-    Write-Warning "Git repository not detected; skipped branch creation for $ProjectId"
-}
-
-# Create project configuration file with user-defined settings
-$ProjectsDir = Join-Path ".github" "projects"
-New-Item -ItemType Directory -Force -Path $ProjectsDir | Out-Null
-$ProjectFile = Join-Path $ProjectsDir "$ProjectId.yml"
-
-# Enhanced interactive project configuration
-Write-Host "🔧 GitHub Project Creation Setup" -ForegroundColor Green
-Write-Host "=================================" -ForegroundColor Green
-Write-Host ""
-Write-Host "Project Description: $ProjectDescription" -ForegroundColor Yellow
-Write-Host ""
-
-$ProjectName = Read-Host "Project Name (default: derived from description)"
-if (-not $ProjectName) {
-    $ProjectName = $ProjectDescription.Substring(0, [Math]::Min(50, $ProjectDescription.Length)).Trim()
-    if (-not $ProjectName) {
-        $ProjectName = "New Project"
-    }
+# Display success message
+Write-Host "✅ GitHub Project Creation Script is ready to use!" -ForegroundColor Green
+Write-Host "   Run with -Help to see available options and examples" -ForegroundColor Cyan
 }
 
 $ProjectVisibility = Read-Host "Project Visibility (public/private) [public]"
