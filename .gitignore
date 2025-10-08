@@ -1,8 +1,22 @@
-# Python
+# IDE and Editor files
+.windsurf/
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
+
+# Project files
+uv.lock
+
+# Scripts and backups
+scripts/README.md
+scripts/bash/backup/
+
+# Python
+src/specify_cli/__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -20,26 +34,14 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# Virtual Environment
 venv/
-ENV/
 env/
+ENV/
+.env
 .venv
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-
-# Project specific
+# Logs and databases
 *.log
-.env
-.env.local
-*.lock
-
-# Spec Kit-specific files
-.genreleases/
-*.zip
-sdd-*/
+*.sql
+*.sqlite

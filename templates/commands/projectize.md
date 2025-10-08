@@ -1,38 +1,46 @@
 ---
-description: Initialize a GitHub project with best practices, including repository setup, project boards, and task tracking.
+description: Create a GitHub project board from existing specs and tasks
 scripts:
-  sh: scripts/bash/create-github-project.sh
-  ps: scripts/powershell/create-github-project.ps1
+  # The agent will automatically select the appropriate script based on OS
+  sh: scripts/bash/github-project.sh
+  ps: scripts/powershell/github-project.ps1
 ---
 
-The user input to you can be provided directly by the agent or as a command argument - you **MUST** consider it before proceeding with the prompt (if not empty).
-
-User input:
-
-$ARGUMENTS
-
-## Overview
-Initialize a GitHub project with best practices, including:
-- Repository setup
-- Project boards
-- Task tracking
-- Standard files and workflows
+## Execution Rules
+- The agent will automatically detect the OS and use the appropriate script
+- On Windows: PowerShell script will be used
+- On Unix-like (Linux, macOS): Bash script will be used
+- No additional wrapper scripts are needed
+- Follow the agent's standard behavior for script execution
+- DO NOT create a new repository - only work with existing ones
+- Source all tasks from the `specify/Features` directory
 
 ## Usage
-`/projectize [project-name] [options]`
 
-## Options
-- `--template [template-name]`: Use a specific template (default: basic)
-- `--private`: Create a private repository
-- `--org [org-name]`: Create under a specific organization
+```
+# Create a kanban board for the current repository (default)
+/projectize add-board --name "Project Board" --template kanban
+```
 
-## Examples
-- `/projectize my-project`
-- `/projectize my-org/my-project --template nodejs --private`
+## Available Templates
+- `kanban`: Backlog, To Do, In Progress, In Review, Done
+- `basic`: To Do, In Progress, Done
+- `bug-triage`: Reported, Needs Triage, In Progress, Needs Fix, Resolved
 
-## Workflow
-1. Creates a new GitHub repository
-2. Sets up a project board with standard columns
-3. Initializes with recommended files (README, LICENSE, etc.)
-4. Configures branch protection rules
-5. Sets up GitHub Actions workflows
+## Available Templates
+- `kanban`: Backlog, To Do, In Progress, In Review, Done
+- `basic`: To Do, In Progress, Done
+- `bug-triage`: Reported, Needs Triage, In Progress, Needs Fix, Resolved
+
+## Requirements
+- Must be run from within a git repository
+- GitHub CLI (`gh`) installed and authenticated
+- jq (for JSON processing)
+
+## Notes
+- The script will automatically detect the current repository
+- All actions are logged for reference
+- No repository will be created - this only works with existing repositories
+- The project board will be populated from the `specify/Features` directory
+- Each feature spec will be converted into project board items
+- Tasks will be extracted from the spec files and added as checkable items
