@@ -1,0 +1,178 @@
++ set -euo pipefail
++ GREEN='\033[0;32m'
++ YELLOW='\033[1;33m'
++ RED='\033[0;31m'
++ BLUE='\033[0;34m'
++ NC='\033[0m'
++ VERBOSE=
++ '[' --name = --verbose ']'
++ '[' '!' -x ./github-project.sh ']'
++ set -e
++ check_requirements
++ missing=()
++ local missing
++ for cmd in git gh jq
++ command -v git
++ for cmd in git gh jq
++ command -v gh
++ for cmd in git gh jq
++ command -v jq
++ '[' 0 -gt 0 ']'
++ gh auth status
++ ACTION=create
++ REPO_OWNER=
++ REPO_NAME=
++ PROJECT_NAME=
++ BOARD_NAME=
++ DESCRIPTION=
++ TEMPLATE=basic
++ BOARD_TEMPLATE=basic
++ NON_INTERACTIVE=false
++ IMPORT_TASKS=false
++ DRY_RUN=false
++ GREEN='\033[0;32m'
++ YELLOW='\033[1;33m'
++ RED='\033[0;31m'
++ BLUE='\033[0;34m'
++ NC='\033[0m'
++ main --name 'Test Project V2' --template kanban --verbose
++ local 'BOARD_NAME=Project Board'
++ local TEMPLATE=kanban
++ local IMPORT_TASKS=false
++ local project_url
++ [[ 5 -gt 0 ]]
++ key=--name
++ case $key in
++ BOARD_NAME='Test Project V2'
++ shift 2
++ [[ 3 -gt 0 ]]
++ key=--template
++ case $key in
++ TEMPLATE=kanban
++ shift 2
++ [[ 1 -gt 0 ]]
++ key=--verbose
++ case $key in
++ [[ --verbose =~ ^(add-board|import-tasks)$ ]]
++ shift
++ [[ 0 -gt 0 ]]
++ '[' false = true ']'
++ local SCOPE=repo
++ local ORG_NAME=
+++ create_board 'Test Project V2' kanban repo ''
+++ local 'board_name=Test Project V2'
+++ local template=kanban
+++ local scope=repo
+++ local org_name=
+++ log_info 'Creating '\''Test Project V2'\'' with kanban template using GitHub Projects (v2) API...'
+++ '[' -n '' ']'
+++ return 0
+++ local repo_owner=
+++ local repo_name=
+++ local is_org_repo=false
+++ local repo_info
++++ gh repo view --json nameWithOwner,name,owner,isInOrganization
+++ repo_info='{"isInOrganization":false,"name":"spec-kit","nameWithOwner":"BotsInTheBack/spec-kit","owner":{"id":"U_kgDODPZ7KA","login":"BotsInTheBack"}}'
+++ '[' 0 -eq 0 ']'
+++ '[' -n '{"isInOrganization":false,"name":"spec-kit","nameWithOwner":"BotsInTheBack/spec-kit","owner":{"id":"U_kgDODPZ7KA","login":"BotsInTheBack"}}' ']'
++++ echo '{"isInOrganization":false,"name":"spec-kit","nameWithOwner":"BotsInTheBack/spec-kit","owner":{"id":"U_kgDODPZ7KA","login":"BotsInTheBack"}}'
++++ jq -r .name
+++ repo_name=spec-kit
++++ echo '{"isInOrganization":false,"name":"spec-kit","nameWithOwner":"BotsInTheBack/spec-kit","owner":{"id":"U_kgDODPZ7KA","login":"BotsInTheBack"}}'
++++ jq -r .owner
+++ local 'owner_info={
+  "id": "U_kgDODPZ7KA",
+  "login": "BotsInTheBack"
+}'
++++ echo '{
+  "id": "U_kgDODPZ7KA",
+  "login": "BotsInTheBack"
+}'
++++ jq -r .login
+++ repo_owner=BotsInTheBack
++++ echo '{"isInOrganization":false,"name":"spec-kit","nameWithOwner":"BotsInTheBack/spec-kit","owner":{"id":"U_kgDODPZ7KA","login":"BotsInTheBack"}}'
++++ jq -r '.isInOrganization // false'
+++ is_org_repo=false
+++ '[' repo = auto ']'
+++ local owner=
+++ local owner_id=
+++ local owner_query
+++ '[' repo = org ']'
+++ '[' -z BotsInTheBack ']'
+++ owner=BotsInTheBack
+++ scope=user
+++ log_info 'Getting user ID for: BotsInTheBack'
+++ '[' -n '' ']'
+++ return 0
+++ owner_query='query { user(login: "BotsInTheBack") { id } }'
+++ '[' -z BotsInTheBack ']'
+++ local owner_info
++++ gh api graphql -f 'query=query { user(login: "BotsInTheBack") { id } }'
+++ owner_info='{"data":{"user":{"id":"U_kgDODPZ7KA"}}}'
+++ '[' user = org ']'
++++ jq -r '.data.user.id // empty'
++++ echo '{"data":{"user":{"id":"U_kgDODPZ7KA"}}}'
+++ owner_id=U_kgDODPZ7KA
+++ '[' -z U_kgDODPZ7KA ']'
+++ log_info 'Using owner ID: U_kgDODPZ7KA (BotsInTheBack)'
+++ '[' -n '' ']'
+++ return 0
+++ log_info 'Creating project: Test Project V2'
+++ '[' -n '' ']'
+++ return 0
+++ local error_file
++++ mktemp
+++ error_file=/tmp/tmp.zqHj1zsqfD
+++ local query
+++ '[' user = org ']'
++++ cat
+++ query='        mutation {
+          createProjectV2(
+            input: {
+              ownerId: "U_kgDODPZ7KA"
+              title: "Test Project V2"
+            }
+          ) {
+            projectV2 {
+              id
+              number
+              title
+              url
+            }
+          }
+        }'
+++ log_info 'Creating project using Projects API v2...'
+++ '[' -n '' ']'
+++ return 0
+++ local project
++++ gh api graphql -f 'query=        mutation {
+          createProjectV2(
+            input: {
+              ownerId: "U_kgDODPZ7KA"
+              title: "Test Project V2"
+            }
+          ) {
+            projectV2 {
+              id
+              number
+              title
+              url
+            }
+          }
+        }'
+++ project='{"data":{"createProjectV2":null},"errors":[{"type":"FORBIDDEN","path":["createProjectV2"],"extensions":{"saml_failure":false},"locations":[{"line":2,"column":11}],"message":"Resource not accessible by personal access token"}]}'
+++ local exit_code=1
+++ local error_message
+++ error_message=
+++ log_info 'Exit code: 1'
+++ '[' -n '' ']'
+++ return 0
+++ log_info 'Error output: '
+++ '[' -n '' ']'
+++ return 0
+++ '[' 1 -ne 0 ']'
+++ log_error '=== PROJECT CREATION FAILED ==='
+++ echo -e '\033[0;31m[ERROR]\033[0m === PROJECT CREATION FAILED ==='
+[0;31m[ERROR][0m === PROJECT CREATION FAILED ===
+++ exit 1
++ project_url=
