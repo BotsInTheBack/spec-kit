@@ -8,79 +8,29 @@ scripts:
     #!/bin/bash
     set -e
     
-    # Get the directory of this script
+    # Get script directory and set paths
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-    # Detect operating system
-    detect_os() {
-        case "$(uname -s)" in
-        Linux*)     echo "linux" ;;
-        Darwin*)    echo "macos" ;;
-        CYGWIN*|MINGW*|MSYS*|MING*) 
-          # Check for WSL (Windows Subsystem for Linux)
-          if [ -f /proc/version ] && grep -q "Microsoft" /proc/version; then
-            echo "wsl"
-          else
-            echo "windows"
-          fi
-          ;;
-        *)          echo "unknown" ;;
-      esac
-    }
-    
-    # Get the OS and determine which script to run
-    OS=$(detect_os)
-    
-    # Set script paths
     BASH_SCRIPT="$(dirname "$0")/../../scripts/bash/project-board.sh"
     POWERSHELL_SCRIPT="$(dirname "$0")/../../scripts/powershell/project-board.ps1"
     
-    # Function to run the appropriate script
-    run_script() {
-      case "$1" in
-        linux|macos|wsl)
-          # On Linux, macOS, or WSL, prefer bash script
-          if [ -f "$BASH_SCRIPT" ]; then
-            exec "$BASH_SCRIPT" "$@"
-          else
-            echo "ERROR: Bash script not found at $BASH_SCRIPT" >&2
-            exit 1
-          fi
-          ;;
-        windows)
-          # On Windows, prefer PowerShell
-          if [ -f "$POWERSHELL_SCRIPT" ]; then
-            exec pwsh -File "$POWERSHELL_SCRIPT" "$@"
-          else
-            echo "ERROR: PowerShell script not found at $POWERSHELL_SCRIPT" >&2
-            exit 1
-          fi
-          ;;
+    # Detect OS and run appropriate script
+    case "$(uname -s)" in
+        Linux*|Darwin*)
+            [ -f "$BASH_SCRIPT" ] && exec "$BASH_SCRIPT" "$@" || exit 1 ;;
+        CYGWIN*|MINGW*|MSYS*)
+            [ -f "$POWERSHELL_SCRIPT" ] && exec pwsh -File "$POWERSHELL_SCRIPT" "$@" || exit 1 ;;
         *)
-          # Fallback to bash if available, otherwise PowerShell
-          if [ -f "$BASH_SCRIPT" ]; then
-            exec "$BASH_SCRIPT" "$@"
-          elif [ -f "$POWERSHELL_SCRIPT" ]; then
-            exec pwsh -File "$POWERSHELL_SCRIPT" "$@"
-          else
-            echo "ERROR: No suitable script found" >&2
-            exit 1
-          fi
-          ;;
-      esac
-    }
-    
-    # Run the script with all passed arguments (from Windsurf parameters)
-    run_script "$OS" "$@"
+            [ -f "$BASH_SCRIPT" ] && exec "$BASH_SCRIPT" "$@" || exit 1 ;;
+    esac
 
-# Define parameters for interactive mode
+# Interactive parameters - these will be prompted immediately
 parameters:
   - name: project_name
     description: Name of the project board
     type: string
     required: true
-    prompt: What would you like to name your project board?
-    
+    prompt: "What would you like to name your project board?"
+
   - name: template
     description: Template to use for the project
     type: string
@@ -96,7 +46,7 @@ parameters:
       - name: Bug Triage
         value: bug-triage
         description: Triage, In Progress, Needs Review, Done workflow
-    prompt: Which template would you like to use?
+    prompt: "Which template would you like to use?"
 
   - name: scope
     description: Scope of the project (user or organization)
@@ -110,13 +60,13 @@ parameters:
       - name: Organization
         value: org
         description: Create under an organization
-    prompt: Where would you like to create this project?
+    prompt: "Where would you like to create this project?"
 
   - name: org_name
     description: Organization name (if scope is org)
     type: string
     required: false
-    prompt: Which organization should own this project? (Leave blank to skip)
+    prompt: "Which organization should own this project? (Leave blank to skip)"
     when: scope == 'org'
 
   - name: import_tasks
@@ -124,5 +74,4 @@ parameters:
     type: boolean
     required: false
     default: true
-    prompt: Would you like to import tasks from .specify/features?
----
+    prompt: "Would you like to import tasks from .specify/features?"
