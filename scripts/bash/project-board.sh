@@ -494,8 +494,20 @@ main() {
     local SCOPE="$DEFAULT_SCOPE"
     local ORG_NAME=""
 
-    # Parse command line arguments
+    # Check if arguments are provided (workflow trigger style)
     while [[ $# -gt 0 ]]; do
+    # Check if arguments are provided (workflow trigger style)
+    if [[ $# -ge 1 ]] && [[ "$1" != --* ]]; then
+        # Workflow trigger style: "My Project" "kanban" "user" "myorg" "true"
+        PROJECT_NAME="$1"
+        TEMPLATE="${2:-$DEFAULT_TEMPLATE}"
+        SCOPE="${3:-$DEFAULT_SCOPE}"
+        ORG_NAME="$4"
+        IMPORT_TASKS="${5:-false}"
+        return  # Exit argument parsing for workflow style
+    fi
+
+    # Traditional flag style: --name "My Project" --template kanban
         case "$1" in
             --name)
                 PROJECT_NAME="$2"
