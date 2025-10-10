@@ -1,9 +1,9 @@
 ---
 description: Interactive GitHub project board management with task import from .specify/features
 scripts:
-  # These scripts should be called without interactive flags to use their default behavior
-  sh: scripts/bash/github-project.sh
-  ps: scripts/powershell/github-project.ps1
+  # These scripts MUST be used - they enforce interactive mode
+  sh: scripts/bash/github-project.sh --interactive
+  ps: scripts/powershell/github-project.ps1 -Interactive
 ---
 
 # GitHub Project Board Manager
