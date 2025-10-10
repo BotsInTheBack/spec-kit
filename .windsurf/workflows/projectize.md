@@ -41,41 +41,37 @@ scripts:
         linux|macos|wsl)
           # On Linux, macOS, or WSL, prefer bash script
           if [ -f "$BASH_SCRIPT" ]; then
-            echo "Running bash script (OS: $1)"
-            "$BASH_SCRIPT" --interactive
+            exec "$BASH_SCRIPT" "$@"
           else
-            echo "Bash script not found at $BASH_SCRIPT"
+            echo "ERROR: Bash script not found at $BASH_SCRIPT" >&2
             exit 1
           fi
           ;;
         windows)
           # On Windows, prefer PowerShell
           if [ -f "$POWERSHELL_SCRIPT" ]; then
-            echo "Running PowerShell script (OS: $1)"
-            pwsh -File "$POWERSHELL_SCRIPT" -Interactive
+            exec pwsh -File "$POWERSHELL_SCRIPT" "$@"
           else
-            echo "PowerShell script not found at $POWERSHELL_SCRIPT"
+            echo "ERROR: PowerShell script not found at $POWERSHELL_SCRIPT" >&2
             exit 1
           fi
           ;;
         *)
           # Fallback to bash if available, otherwise PowerShell
           if [ -f "$BASH_SCRIPT" ]; then
-            echo "Running bash script (fallback)"
-            "$BASH_SCRIPT" --interactive
+            exec "$BASH_SCRIPT" "$@"
           elif [ -f "$POWERSHELL_SCRIPT" ]; then
-            echo "Running PowerShell script (fallback)"
-            pwsh -File "$POWERSHELL_SCRIPT" -Interactive
+            exec pwsh -File "$POWERSHELL_SCRIPT" "$@"
           else
-            echo "No suitable script found"
+            echo "ERROR: No suitable script found" >&2
             exit 1
           fi
           ;;
       esac
     }
     
-    # Run the script
-    run_script "$OS"
+    # Run the script with all passed arguments (from Windsurf parameters)
+    run_script "$OS" "$@"
 
 # Define parameters for interactive mode
 parameters:
