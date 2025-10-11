@@ -7,13 +7,26 @@
 # through the GitHub CLI and API. It supports creating projects with various templates,
 # importing tasks from .specify/features, and organizing issues hierarchically.
 
+[cmdletbinding()]
 param(
+    [Parameter(Mandatory=$false)]
     [string]$Name,
+    
+    [ValidateSet("kanban", "feature-dev", "bug-triage")]
     [string]$Template = "kanban",
+    
     [switch]$ImportTasks,
+    
+    [ValidateSet("user", "org")]
     [string]$Scope = "user",
+    
     [string]$Org,
-    [switch]$Help
+    
+    [switch]$NonInteractive,
+    
+    [switch]$Help,
+    
+    [switch]$DebugMode
 )
 
 #===============================================================================
@@ -32,6 +45,12 @@ $NC = [char]27 + '[0m' # No Color
 # Default values
 $DefaultTemplate = "kanban"
 $DefaultScope = "user"
+$Interactive = -not $NonInteractive
+
+# Set debug mode
+if ($DebugMode) {
+    $DebugPreference = 'Continue'
+}
 
 #===============================================================================
 # LOGGING FUNCTIONS
@@ -695,7 +714,7 @@ function Invoke-ProjectBoardManager {
 
     # Create the board
     $boardId = New-ProjectBoard $projectName $template $scope $orgName
-
+    
     if (-not $boardId) {
         Write-Error "Failed to create project board"
         exit 1
